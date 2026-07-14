@@ -207,6 +207,15 @@
   const buildingMassConst = 50.0;
   const kBuilding = 500.0;
   const kTmd = 50.0;
+  // Small structural damping ratios. The original VPython source has NO
+  // damping at all (pure springs), which means near resonance the response
+  // grows without bound forever - that saturates the risk gauge at ~100%
+  // and makes it look "stuck" no matter what you change. Real buildings and
+  // real TMDs always have some energy dissipation, so a modest, realistic
+  // damping ratio is added here to keep the response bounded and make the
+  // effect of each variable actually visible.
+  const zetaBuilding = 0.02; // ~2% structural damping, typical for buildings
+  const zetaTmd = 0.02;      // small viscous damper alongside the TMD spring
 
   // ---- State ----
   let t = 0;
@@ -239,17 +248,28 @@
   const riskLabel = document.getElementById('riskLabel');
   const riskFill = document.getElementById('riskFill');
 
+  function resetDynamics(){
+    // Clear position/velocity state and history so a stale, possibly large
+    // amplitude built up under the previous settings doesn't linger and
+    // mask the effect of the setting you just changed. Time keeps running.
+    buildingX = 0; buildingV = 0; tmdX = 0; tmdV = 0;
+    buildingHist.length = 0; tmdHist.length = 0; groundHist.length = 0;
+  }
+
   freqSlider.addEventListener('input', e=>{
     earthquakeFreq = parseFloat(e.target.value);
     freqVal.textContent = earthquakeFreq.toFixed(1) + ' Hz';
+    resetDynamics();
   });
   massSlider.addEventListener('input', e=>{
     tmdMass = parseFloat(e.target.value);
     massVal.textContent = tmdMass.toFixed(1) + ' kg';
+    resetDynamics();
   });
   floorsSlider.addEventListener('input', e=>{
     buildingFloors = parseInt(e.target.value);
     floorsVal.textContent = buildingFloors + '층';
+    resetDynamics();
   });
 
   toggleBtn.addEventListener('click', ()=>{
@@ -264,21 +284,35 @@
     buildingHist.length = 0; tmdHist.length = 0; groundHist.length = 0;
   });
 
-  // ---- Physics step (mirrors the VPython while-loop body) ----
+  // ---- Physics step (mirrors the VPython while-loop body, plus damping) ----
   function step(){
     const omega = 2 * Math.PI * earthquakeFreq;
     groundX = 0.5 * Math.sin(omega * t);
+    const groundV = 0.5 * omega * Math.cos(omega * t); // analytic ground velocity
 
     const effectiveKBuilding = kBuilding / (buildingFloors * 0.8);
-    const fB = -effectiveKBuilding * (buildingX - groundX);
-    const fTmdInteraction = -kTmd * (tmdX - buildingX);
+    const cBuilding = 2 * zetaBuilding * Math.sqrt(effectiveKBuilding * buildingMassConst);
 
-    const buildingA = (fB - fTmdInteraction) / buildingMassConst;
+    // Force on the building from the ground spring + the building's own
+    // structural damper (opposes building velocity relative to the ground)
+    const fB = -effectiveKBuilding * (buildingX - groundX) - cBuilding * (buildingV - groundV);
+
+    // Force on the TMD from its spring + damper (opposes TMD velocity
+    // relative to the building). Newton's third law: the building feels
+    // the exact opposite of what the TMD feels from this connection.
+    const fTmdInteraction = -kTmd * (tmdX - buildingX);
+    let fTmdDamping = 0, cTmd = 0;
+    if (tmdMass > 0){
+      cTmd = 2 * zetaTmd * Math.sqrt(kTmd * tmdMass);
+      fTmdDamping = -cTmd * (tmdV - buildingV);
+    }
+
+    const buildingA = (fB - fTmdInteraction - fTmdDamping) / buildingMassConst;
     buildingV += buildingA * dt;
     buildingX += buildingV * dt;
 
     if (tmdMass > 0){
-      const tmdA = fTmdInteraction / tmdMass;
+      const tmdA = (fTmdInteraction + fTmdDamping) / tmdMass;
       tmdV += tmdA * dt;
       tmdX += tmdV * dt;
     } else {
