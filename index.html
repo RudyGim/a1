@@ -1,235 +1,477 @@
-                    <input type="range" id="slideFloors" min="1" max="5" step="1" value="3">
-                </div>
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TMD 내진 설계 시뮬레이터</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0a0e14;
+    --panel:#111823;
+    --panel2:#0d1420;
+    --line: rgba(148,168,196,0.14);
+    --text:#e6ecf5;
+    --text-dim:#7c8aa0;
+    --quake:#e8452c;
+    --building:#4fa8e8;
+    --tmd:#f2c14e;
+    --safe:#3ecf8e;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(79,168,232,0.07), transparent 60%),
+      radial-gradient(900px 500px at 100% 10%, rgba(232,69,44,0.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:'IBM Plex Sans KR','IBM Plex Mono',sans-serif;
+    min-height:100vh;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1180px;margin:0 auto;}
+  header{
+    display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:14px;
+    border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:22px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:.18em;
+    color:var(--quake); text-transform:uppercase; margin-bottom:6px; display:flex; align-items:center; gap:8px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--quake); box-shadow:0 0 8px var(--quake); animation:pulse 1.4s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  h1{font-size:clamp(22px,3vw,30px); margin:0; font-weight:600; letter-spacing:-0.01em;}
+  .sub{color:var(--text-dim); font-size:13.5px; max-width:520px; line-height:1.5; margin-top:6px;}
+  .readout{
+    font-family:'IBM Plex Mono',monospace; text-align:right;
+  }
+  .readout .label{font-size:10.5px; color:var(--text-dim); letter-spacing:.1em; text-transform:uppercase;}
+  .readout .value{font-size:22px; font-weight:600;}
+  .readout .value span{font-size:13px; color:var(--text-dim); font-weight:400;}
 
-                <div class="control-group">
-                    <label class="control-label">원터치 실험 프리셋</label>
-                    <div class="preset-container">
-                        <button class="btn-preset" onclick="loadPreset(1.2, 0, 3)">⚠️ 공명 유도</button>
-                        <button class="btn-preset" onclick="loadPreset(1.2, 15, 3)">🛡️ TMD 작동</button>
-                    </div>
-                </div>
-            </div>
+  .grid{
+    display:grid;
+    grid-template-columns: 1.35fr 1fr;
+    gap:18px;
+  }
+  @media (max-width:880px){ .grid{grid-template-columns:1fr;} }
 
-            <div class="info-card">
-                <h3>구현 핵심 과학 원리</h3>
-                <p><strong>뉴턴 제2운동법칙 & 훅의 법칙:</strong> 건물의 강성과 대지 진동에 따른 복원력을 실시간 연립미분방정식(Euler method)으로 계산합니다.</p>
-                <p><strong>파동의 공명:</strong> 건물의 층수(높이)가 달라지면 건물의 고유 진동수가 바뀝니다. 외부 지진파 진동수가 이와 일치할 때 진폭이 무한히 커지는 현상을 관찰하세요.</p>
-            </div>
+  .panel{
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    border:1px solid var(--line); border-radius:var(--radius);
+    padding:18px 18px 16px;
+  }
+  .panel h2{
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-dim);
+    margin:0 0 12px; font-weight:600; display:flex; align-items:center; justify-content:space-between;
+  }
+  canvas{display:block; width:100%; border-radius:6px;}
+  #stage{background:#080c12; border:1px solid var(--line);}
+  #graph{background:#080c12; border:1px solid var(--line); margin-top:14px;}
 
-            <div class="info-card" style="border-left: 4px solid var(--accent-red);">
-                <h3 style="color: var(--accent-red);">첨단과학기술: TMD</h3>
-                <p><strong>동조질량댐퍼(TMD):</strong> 거대 고층건물 내부에 무거운 추를 달아놓아, 지진 발생 시 추의 관성 때문에 건물의 움직임과 반대로 움직이도록 유도합니다. 이를 통해 건물이 받는 에너지를 추의 운동에너지로 상쇄시켜 붕괴를 막습니다.</p>
-            </div>
-        </div>
+  .legend{display:flex; gap:16px; font-size:11.5px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; margin-top:8px;}
+  .legend span{display:inline-flex; align-items:center; gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:2px; display:inline-block;}
+
+  .control{margin-bottom:20px;}
+  .control:last-child{margin-bottom:6px;}
+  .control-top{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:8px;}
+  .control-name{font-size:13px; color:var(--text);}
+  .control-val{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--building); font-weight:600;}
+  input[type=range]{
+    -webkit-appearance:none; width:100%; height:4px; border-radius:2px;
+    background:var(--line); outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+    background:var(--building); cursor:pointer; border:2px solid #0a0e14;
+    box-shadow:0 0 0 1px var(--building);
+  }
+  input[type=range]::-moz-range-thumb{
+    width:16px; height:16px; border-radius:50%; background:var(--building);
+    cursor:pointer; border:2px solid #0a0e14;
+  }
+  .hint{font-size:11px; color:var(--text-dim); margin-top:5px; line-height:1.4;}
+
+  .btnrow{display:flex; gap:10px; margin-top:18px;}
+  button{
+    flex:1; font-family:'IBM Plex Mono',monospace; font-size:12.5px; letter-spacing:.04em;
+    padding:10px 12px; border-radius:7px; border:1px solid var(--line); cursor:pointer;
+    background:transparent; color:var(--text); transition:all .15s ease;
+  }
+  button:hover{border-color:var(--building); color:var(--building);}
+  button.primary{background:var(--building); color:#081018; border-color:var(--building); font-weight:600;}
+  button.primary:hover{opacity:.88; color:#081018;}
+
+  .stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:16px;}
+  .stat{
+    background:var(--panel2); border:1px solid var(--line); border-radius:7px; padding:10px 12px;
+  }
+  .stat .label{font-size:10px; color:var(--text-dim); letter-spacing:.08em; text-transform:uppercase;}
+  .stat .val{font-family:'IBM Plex Mono',monospace; font-size:16.5px; margin-top:3px; font-weight:600;}
+  .risk-bar{height:6px; border-radius:3px; background:var(--line); margin-top:8px; overflow:hidden;}
+  .risk-fill{height:100%; width:0%; background:var(--safe); transition:width .25s ease, background .25s ease;}
+
+  footer{margin-top:24px; text-align:center; color:var(--text-dim); font-size:11px; font-family:'IBM Plex Mono',monospace;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div>
+      <div class="eyebrow"><span class="dot"></span>SEISMIC RESPONSE MODEL</div>
+      <h1>동조질량댐퍼(TMD) 내진 설계 시뮬레이터</h1>
+      <div class="sub">지진파가 건물을 흔들 때, 옥상의 TMD(동조질량댐퍼)가 어떻게 진동을 상쇄하는지 실시간으로 관찰하세요.</div>
+    </div>
+    <div class="readout">
+      <div class="label">Elapsed Time</div>
+      <div class="value" id="timeReadout">0.0<span> s</span></div>
+    </div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT: Visualization -->
+    <div class="panel">
+      <h2>구조 응답 시각화 <span id="statusTag" style="color:var(--safe)">● RUNNING</span></h2>
+      <canvas id="stage" width="760" height="440"></canvas>
+      <div class="legend">
+        <span><i style="background:var(--building)"></i>건물 (지면 대비 상대 변위)</span>
+        <span><i style="background:var(--tmd)"></i>TMD 추 (건물 대비 상대 변위)</span>
+        <span><i style="background:var(--quake)"></i>지진파 (지면 절대 변위)</span>
+      </div>
+      <canvas id="graph" width="760" height="180"></canvas>
     </div>
 
-    <script>
-        const canvas = document.getElementById('simCanvas');
-        const ctx = canvas.getContext('2d');
+    <!-- RIGHT: Controls -->
+    <div class="panel">
+      <h2>조작 변수</h2>
 
-        // Resize Canvas dynamically
-        function resizeCanvas() {
-            canvas.width = canvas.parentElement.clientWidth;
-            canvas.height = 400;
-        }
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+      <div class="control">
+        <div class="control-top">
+          <span class="control-name">지진파 진동수 (Hz)</span>
+          <span class="control-val" id="freqVal">1.0 Hz</span>
+        </div>
+        <input type="range" id="freqSlider" min="0.2" max="3.0" step="0.1" value="1.0">
+        <div class="hint">값이 클수록 빠르게 흔들리는 지진을 의미합니다.</div>
+      </div>
 
-        // 물리 변수 정의
-        let freq = 1.0;
-        let tmdMass = 5.0;
-        let floors = 3;
+      <div class="control">
+        <div class="control-top">
+          <span class="control-name">TMD 추 질량 (kg)</span>
+          <span class="control-val" id="massVal">5.0 kg</span>
+        </div>
+        <input type="range" id="massSlider" min="0" max="20" step="0.5" value="5.0">
+        <div class="hint">0kg이면 TMD 장치가 없는 것과 동일합니다.</div>
+      </div>
 
-        // 상태 변수
-        let time = 0;
-        const dt = 0.02;
+      <div class="control">
+        <div class="control-top">
+          <span class="control-name">건물 층수</span>
+          <span class="control-val" id="floorsVal">3층</span>
+        </div>
+        <input type="range" id="floorsSlider" min="1" max="5" step="1" value="3">
+        <div class="hint">층수가 높을수록 건물의 고유진동수가 낮아집니다.</div>
+      </div>
 
-        let groundX = 0;
-        let buildingX = 0;
-        let buildingV = 0;
-        let tmdX = 0;
-        let tmdV = 0;
+      <div class="btnrow">
+        <button class="primary" id="toggleBtn">일시정지</button>
+        <button id="resetBtn">초기화</button>
+      </div>
 
-        const kBuildingBase = 600;
-        const kTmd = 60;
-        const buildingMass = 50;
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="label">건물 고유진동수</div>
+          <div class="val" id="naturalFreq">— Hz</div>
+        </div>
+        <div class="stat">
+          <div class="label">공진 위험도</div>
+          <div class="val" id="riskLabel">—</div>
+          <div class="risk-bar"><div class="risk-fill" id="riskFill"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        // UI 요소 연결
-        const slideFreq = document.getElementById('slideFreq');
-        const slideMass = document.getElementById('slideMass');
-        const slideFloors = document.getElementById('slideFloors');
+  <footer>ω_n = √(k_eff / m_building) · f_n = ω_n / 2π · VPython 시뮬레이션 로직을 기반으로 이식됨</footer>
+</div>
 
-        const valFreq = document.getElementById('valFreq');
-        const valMass = document.getElementById('valMass');
-        const valFloors = document.getElementById('valFloors');
-        const statusBadge = document.getElementById('statusBadge');
+<script>
+(function(){
+  // ---- Physics constants (ported from the VPython source) ----
+  const dt = 0.01;
+  const buildingMassConst = 50.0;
+  const kBuilding = 500.0;
+  const kTmd = 50.0;
 
-        slideFreq.addEventListener('input', (e) => { freq = parseFloat(e.target.value); valFreq.innerText = freq.toFixed(1) + ' Hz'; });
-        slideMass.addEventListener('input', (e) => { tmdMass = parseFloat(e.target.value); valMass.innerText = tmdMass.toFixed(1) + ' kg'; });
-        slideFloors.addEventListener('input', (e) => { floors = parseInt(e.target.value); valFloors.innerText = floors + ' 층'; });
+  // ---- State ----
+  let t = 0;
+  let groundX = 0, buildingX = 0, buildingV = 0, tmdX = 0, tmdV = 0;
+  let running = true;
 
-        function loadPreset(f, m, l) {
-            freq = f; tmdMass = m; floors = l;
-            slideFreq.value = f; slideMass.value = m; slideFloors.value = l;
-            valFreq.innerText = f.toFixed(1) + ' Hz';
-            valMass.innerText = m.toFixed(1) + ' kg';
-            valFloors.innerText = l + ' 층';
-        }
+  let earthquakeFreq = 1.0;
+  let tmdMass = 5.0;
+  let buildingFloors = 3;
 
-        // Chart.js 설정
-        const chartCtx = document.getElementById('realtimeChart').getContext('2d');
-        const maxDataPoints = 100;
-        const chartData = {
-            labels: Array(maxDataPoints).fill(''),
-            datasets: [
-                {
-                    label: '건물 변위 (Building)',
-                    borderColor: '#3b82f6',
-                    data: Array(maxDataPoints).fill(0),
-                    borderWidth: 2,
-                    fill: false,
-                    pointRadius: 0
-                },
-                {
-                    label: 'TMD 추 상대변위',
-                    borderColor: '#ef4444',
-                    data: Array(maxDataPoints).fill(0),
-                    borderWidth: 2,
-                    fill: false,
-                    pointRadius: 0
-                }
-            ]
-        };
+  // history buffer for the seismograph-style graph
+  const HISTORY_SECONDS = 12;
+  const maxPoints = HISTORY_SECONDS / dt;
+  const buildingHist = [];
+  const tmdHist = [];
 
-        const chart = new Chart(chartCtx, {
-            type: 'line',
-            data: chartData,
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: { display: false },
-                    y: { min: -2.5, max: 2.5, grid: { color: '#374151' }, ticks: { color: '#9ca3af' } }
-                },
-                plugins: {
-                    legend: { labels: { color: '#f3f4f6' } }
-                }
-            }
-        });
+  // ---- DOM ----
+  const freqSlider = document.getElementById('freqSlider');
+  const massSlider = document.getElementById('massSlider');
+  const floorsSlider = document.getElementById('floorsSlider');
+  const freqVal = document.getElementById('freqVal');
+  const massVal = document.getElementById('massVal');
+  const floorsVal = document.getElementById('floorsVal');
+  const timeReadout = document.getElementById('timeReadout');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const statusTag = document.getElementById('statusTag');
+  const naturalFreqEl = document.getElementById('naturalFreq');
+  const riskLabel = document.getElementById('riskLabel');
+  const riskFill = document.getElementById('riskFill');
 
-        // 애니메이션 및 물리 루프
-        function simulate() {
-            // 1. 지진 물리연산
-            const omegaEarthquake = 2 * Math.PI * freq;
-            groundX = 0.6 * Math.sin(omegaEarthquake * time);
+  freqSlider.addEventListener('input', e=>{
+    earthquakeFreq = parseFloat(e.target.value);
+    freqVal.textContent = earthquakeFreq.toFixed(1) + ' Hz';
+  });
+  massSlider.addEventListener('input', e=>{
+    tmdMass = parseFloat(e.target.value);
+    massVal.textContent = tmdMass.toFixed(1) + ' kg';
+  });
+  floorsSlider.addEventListener('input', e=>{
+    buildingFloors = parseInt(e.target.value);
+    floorsVal.textContent = buildingFloors + '층';
+  });
 
-            // 층수가 높을수록 강성 감소 (고유진동수 낮아짐)
-            const effectiveKBuilding = kBuildingBase / (floors * 0.75);
-            
-            // 훅의 법칙 & 뉴턴 운동 방정식
-            const fB = -effectiveKBuilding * (buildingX - groundX);
-            const fTmdInteraction = -kTmd * (tmdX - buildingX);
+  toggleBtn.addEventListener('click', ()=>{
+    running = !running;
+    toggleBtn.textContent = running ? '일시정지' : '재생';
+    statusTag.textContent = running ? '● RUNNING' : '● PAUSED';
+    statusTag.style.color = running ? 'var(--safe)' : 'var(--text-dim)';
+  });
 
-            const buildingA = (fB - fTmdInteraction) / buildingMass;
-            buildingV += buildingA * dt;
-            buildingX += buildingV * dt;
+  resetBtn.addEventListener('click', ()=>{
+    t = 0; groundX = 0; buildingX = 0; buildingV = 0; tmdX = 0; tmdV = 0;
+    buildingHist.length = 0; tmdHist.length = 0;
+  });
 
-            if (tmdMass > 0) {
-                const tmdA = fTmdInteraction / tmdMass;
-                tmdV += tmdA * dt;
-                tmdX += tmdV * dt;
-            } else {
-                tmdX = buildingX;
-                tmdV = 0;
-            }
+  // ---- Physics step (mirrors the VPython while-loop body) ----
+  function step(){
+    const omega = 2 * Math.PI * earthquakeFreq;
+    groundX = 0.5 * Math.sin(omega * t);
 
-            // 실시간 상태 메세지 변경
-            const relativeDisp = Math.abs(buildingX - groundX);
-            if (relativeDisp > 1.2) {
-                statusBadge.innerText = "🚨 위험: 공명 발생! 건물 붕괴 위기";
-                statusBadge.style.backgroundColor = "var(--accent-red)";
-            } else if (tmdMass > 8 && relativeDisp < 0.4) {
-                statusBadge.innerText = "🛡️ 안전: TMD 실시간 충격 감쇄 중";
-                statusBadge.style.backgroundColor = "var(--accent-green)";
-            } else {
-                statusBadge.innerText = "지진파 시뮬레이션 가동 중";
-                statusBadge.style.backgroundColor = "var(--accent-blue)";
-            }
+    const effectiveKBuilding = kBuilding / (buildingFloors * 0.8);
+    const fB = -effectiveKBuilding * (buildingX - groundX);
+    const fTmdInteraction = -kTmd * (tmdX - buildingX);
 
-            // 2. 렌더링
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const buildingA = (fB - fTmdInteraction) / buildingMassConst;
+    buildingV += buildingA * dt;
+    buildingX += buildingV * dt;
 
-            const centerX = canvas.width / 2;
-            const baseY = canvas.height - 50;
+    if (tmdMass > 0){
+      const tmdA = fTmdInteraction / tmdMass;
+      tmdV += tmdA * dt;
+      tmdX += tmdV * dt;
+    } else {
+      tmdX = buildingX;
+      tmdV = 0;
+    }
 
-            // 지면 그리기
-            ctx.fillStyle = '#4b5563';
-            ctx.fillRect(0, baseY, canvas.width, 50);
-            ctx.fillStyle = '#ff9800';
-            ctx.fillRect(centerX + groundX * 60 - 150, baseY, 300, 10); // 진동 판
+    buildingHist.push(buildingX - groundX);
+    tmdHist.push(tmdX - buildingX);
+    if (buildingHist.length > maxPoints){ buildingHist.shift(); tmdHist.shift(); }
 
-            // 건물 그리기
-            const bWidth = 100;
-            const floorHeight = 50;
-            const bHeight = floors * floorHeight;
-            const bX = centerX + buildingX * 60 - bWidth / 2;
-            const bY = baseY - bHeight;
+    t += dt;
+  }
 
-            // 건물 몸체
-            ctx.fillStyle = 'rgba(59, 130, 246, 0.3)';
-            ctx.strokeStyle = '#3b82f6';
-            ctx.lineWidth = 4;
-            ctx.fillRect(bX, bY, bWidth, bHeight);
-            ctx.strokeRect(bX, bY, bWidth, bHeight);
+  // ---- Rendering ----
+  const stage = document.getElementById('stage');
+  const sctx = stage.getContext('2d');
+  const graph = document.getElementById('graph');
+  const gctx = graph.getContext('2d');
 
-            // 층선 그리기
-            ctx.strokeStyle = 'rgba(59, 130, 246, 0.6)';
-            ctx.lineWidth = 2;
-            for(let i=1; i<floors; i++) {
-                ctx.beginPath();
-                ctx.moveTo(bX, baseY - i * floorHeight);
-                ctx.lineTo(bX + bWidth, baseY - i * floorHeight);
-                ctx.stroke();
-            }
+  function fitCanvas(c, ctx){
+    const dpr = window.devicePixelRatio || 1;
+    const rect = c.getBoundingClientRect();
+    c.width = rect.width * dpr;
+    c.height = c.height / c.height * c.height; // no-op safeguard
+  }
 
-            // TMD 그리기
-            if (tmdMass > 0) {
-                const tmdAnchorX = bX + bWidth / 2;
-                const tmdAnchorY = bY + 15;
-                const tmdBallX = centerX + tmdX * 60;
-                
-                // 스프링/줄 표현
-                ctx.strokeStyle = '#9ca3af';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(tmdAnchorX, tmdAnchorY);
-                ctx.lineTo(tmdBallX, tmdAnchorY + 20);
-                ctx.stroke();
+  function drawStage(){
+    const W = stage.width, H = stage.height;
+    sctx.clearRect(0,0,W,H);
 
-                // TMD 추 크기는 질량에 비례
-                ctx.fillStyle = '#ef4444';
-                ctx.beginPath();
-                ctx.arc(tmdBallX, tmdAnchorY + 20, 6 + (tmdMass * 0.5), 0, Math.PI * 2);
-                ctx.fill();
-            }
+    // blueprint grid background
+    sctx.strokeStyle = 'rgba(148,168,196,0.06)';
+    sctx.lineWidth = 1;
+    for(let x=0; x<W; x+=28){ sctx.beginPath(); sctx.moveTo(x,0); sctx.lineTo(x,H); sctx.stroke(); }
+    for(let y=0; y<H; y+=28){ sctx.beginPath(); sctx.moveTo(0,y); sctx.lineTo(W,y); sctx.stroke(); }
 
-            // 3. 차트 업데이트 (매 2프레임마다)
-            if (Math.round(time / dt) % 2 === 0) {
-                chartData.datasets[0].data.push(buildingX - groundX);
-                chartData.datasets[1].data.push(tmdX - buildingX);
-                
-                if (chartData.datasets[0].data.length > maxDataPoints) {
-                    chartData.datasets[0].data.shift();
-                    chartData.datasets[1].data.shift();
-                }
-                chart.update('none'); // 애니메이션 없이 빠르게 업데이트
-            }
+    const scale = 160; // px per meter
+    const cx = W/2;
+    const groundY = H - 70;
 
-            time += dt;
-            requestAnimationFrame(simulate);
-        }
+    // ground bar (shakes)
+    const gx = cx + groundX * scale;
+    sctx.save();
+    sctx.translate(gx, 0);
+    sctx.fillStyle = '#1a2330';
+    sctx.fillRect(-190, groundY, 380, 26);
+    sctx.strokeStyle = 'rgba(232,69,44,0.5)';
+    sctx.lineWidth = 1;
+    for(let i=-180;i<180;i+=14){
+      sctx.beginPath(); sctx.moveTo(i, groundY+26); sctx.lineTo(i+10, groundY+16); sctx.stroke();
+    }
+    sctx.restore();
 
-        simulate();
-    </script>
+    // ground shake indicator arrows
+    sctx.fillStyle = 'var(--quake)';
+    sctx.fillStyle = '#e8452c';
+    sctx.font = '11px "IBM Plex Mono", monospace';
+    sctx.textAlign = 'center';
+    sctx.fillText('GROUND MOTION', gx, groundY + 44);
+
+    // building
+    const floorH = 46;
+    const bH = buildingFloors * floorH;
+    const bW = 96;
+    const bx = cx + buildingX * scale;
+    const bTop = groundY - bH;
+
+    sctx.save();
+    sctx.shadowColor = 'rgba(79,168,232,0.25)';
+    sctx.shadowBlur = 18;
+    sctx.fillStyle = 'rgba(79,168,232,0.16)';
+    sctx.strokeStyle = '#4fa8e8';
+    sctx.lineWidth = 2;
+    sctx.fillRect(bx - bW/2, bTop, bW, bH);
+    sctx.strokeRect(bx - bW/2, bTop, bW, bH);
+    sctx.restore();
+
+    // floor divider lines
+    sctx.strokeStyle = 'rgba(79,168,232,0.35)';
+    sctx.lineWidth = 1;
+    for(let i=1;i<buildingFloors;i++){
+      const fy = bTop + i*floorH;
+      sctx.beginPath(); sctx.moveTo(bx-bW/2, fy); sctx.lineTo(bx+bW/2, fy); sctx.stroke();
+    }
+
+    // spring (zigzag) from building top to TMD ball
+    const tmdPxX = cx + tmdX * scale;
+    const springTopY = bTop + 10;
+    const ballY = bTop - 22;
+    sctx.strokeStyle = '#f2c14e';
+    sctx.lineWidth = 2;
+    sctx.beginPath();
+    const zigs = 6;
+    sctx.moveTo(bx, springTopY);
+    for(let i=1;i<=zigs;i++){
+      const frac = i/zigs;
+      const yy = springTopY - frac*(springTopY-ballY);
+      const xx = bx + (tmdPxX-bx)*frac + (i%2===0? 10:-10);
+      sctx.lineTo(xx, yy);
+    }
+    sctx.lineTo(tmdPxX, ballY);
+    sctx.stroke();
+
+    // TMD ball
+    sctx.beginPath();
+    sctx.fillStyle = '#f2c14e';
+    sctx.shadowColor = 'rgba(242,193,78,0.6)';
+    sctx.shadowBlur = 14;
+    sctx.arc(tmdPxX, ballY, 11, 0, Math.PI*2);
+    sctx.fill();
+    sctx.shadowBlur = 0;
+
+    // building label
+    sctx.fillStyle = '#7c8aa0';
+    sctx.font = '11px "IBM Plex Mono", monospace';
+    sctx.textAlign = 'center';
+    sctx.fillText(buildingFloors + 'F BUILDING', bx, bTop - 34);
+  }
+
+  function drawGraph(){
+    const W = graph.width, H = graph.height;
+    gctx.clearRect(0,0,W,H);
+
+    gctx.strokeStyle = 'rgba(148,168,196,0.08)';
+    gctx.lineWidth = 1;
+    for(let x=0;x<W;x+=40){ gctx.beginPath(); gctx.moveTo(x,0); gctx.lineTo(x,H); gctx.stroke(); }
+    const midY = H/2;
+    gctx.strokeStyle = 'rgba(148,168,196,0.18)';
+    gctx.beginPath(); gctx.moveTo(0,midY); gctx.lineTo(W,midY); gctx.stroke();
+
+    const vScale = 220; // px per meter of displacement
+    function plot(hist, color){
+      if(hist.length < 2) return;
+      gctx.strokeStyle = color;
+      gctx.lineWidth = 1.6;
+      gctx.beginPath();
+      for(let i=0;i<hist.length;i++){
+        const x = (i/maxPoints) * W;
+        const y = midY - hist[i]*vScale;
+        if(i===0) gctx.moveTo(x,y); else gctx.lineTo(x,y);
+      }
+      gctx.stroke();
+    }
+    plot(buildingHist, '#4fa8e8');
+    plot(tmdHist, '#f2c14e');
+
+    gctx.fillStyle = '#7c8aa0';
+    gctx.font = '10px "IBM Plex Mono", monospace';
+    gctx.textAlign = 'left';
+    gctx.fillText('displacement (m)  ·  window: ' + HISTORY_SECONDS + 's', 8, 14);
+  }
+
+  function updateStats(){
+    const effectiveKBuilding = kBuilding / (buildingFloors * 0.8);
+    const omegaN = Math.sqrt(effectiveKBuilding / buildingMassConst);
+    const fN = omegaN / (2*Math.PI);
+    naturalFreqEl.textContent = fN.toFixed(2) + ' Hz';
+
+    const ratio = earthquakeFreq / fN;
+    const closeness = Math.max(0, 1 - Math.min(Math.abs(ratio-1)/0.6, 1));
+    const pct = Math.round(closeness*100);
+    riskFill.style.width = pct + '%';
+    if(pct > 66){ riskLabel.textContent = '위험 (공진 근접)'; riskFill.style.background = 'var(--quake)'; }
+    else if(pct > 33){ riskLabel.textContent = '주의'; riskFill.style.background = 'var(--tmd)'; }
+    else { riskLabel.textContent = '안전'; riskFill.style.background = 'var(--safe)'; }
+
+    timeReadout.innerHTML = t.toFixed(1) + '<span> s</span>';
+  }
+
+  // ---- Main loop: fixed-step physics decoupled from render rate ----
+  let lastFrame = performance.now();
+  let accumulator = 0;
+
+  function loop(now){
+    const frameDt = Math.min((now - lastFrame)/1000, 0.05);
+    lastFrame = now;
+    if(running){
+      accumulator += frameDt;
+      let steps = 0;
+      while(accumulator >= dt && steps < 12){
+        step();
+        accumulator -= dt;
+        steps++;
+      }
+    }
+    drawStage();
+    drawGraph();
+    updateStats();
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+})();
+</script>
 </body>
 </html>
