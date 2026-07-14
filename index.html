@@ -437,13 +437,20 @@
     const fN = omegaN / (2*Math.PI);
     naturalFreqEl.textContent = fN.toFixed(2) + ' Hz';
 
-    const ratio = earthquakeFreq / fN;
-    const closeness = Math.max(0, 1 - Math.min(Math.abs(ratio-1)/0.6, 1));
-    const pct = Math.round(closeness*100);
+    // Dynamic amplification (transmissibility) factor for a damped forced
+    // oscillator: A(r) = 1 / sqrt((1-r^2)^2 + (2*zeta*r)^2), r = f/fn.
+    // This peaks sharply at r=1 (resonance) and falls off on both sides,
+    // which is the physically correct shape - risk is a narrow band around
+    // the natural frequency, not a linear function of how far the slider is.
+    const zeta = 0.05; // assumed structural damping ratio (~5%, typical for buildings)
+    const r = earthquakeFreq / fN;
+    const A = 1 / Math.sqrt(Math.pow(1 - r*r, 2) + Math.pow(2*zeta*r, 2));
+    const pct = Math.round(100 * A / (A + 1)); // smooth 0-100% mapping, no hard clipping
+
     riskFill.style.width = pct + '%';
-    if(pct > 66){ riskLabel.textContent = '위험 (공진 근접)'; riskFill.style.background = 'var(--quake)'; }
-    else if(pct > 33){ riskLabel.textContent = '주의'; riskFill.style.background = 'var(--tmd)'; }
-    else { riskLabel.textContent = '안전'; riskFill.style.background = 'var(--safe)'; }
+    if(pct > 60){ riskLabel.textContent = '위험 (공진 근접) r=' + r.toFixed(2); riskFill.style.background = 'var(--quake)'; }
+    else if(pct > 25){ riskLabel.textContent = '주의  r=' + r.toFixed(2); riskFill.style.background = 'var(--tmd)'; }
+    else { riskLabel.textContent = '안전  r=' + r.toFixed(2); riskFill.style.background = 'var(--safe)'; }
 
     timeReadout.innerHTML = t.toFixed(1) + '<span> s</span>';
   }
