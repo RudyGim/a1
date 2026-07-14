@@ -189,7 +189,7 @@
           <div class="val" id="naturalFreq">— Hz</div>
         </div>
         <div class="stat">
-          <div class="label">공진 위험도</div>
+          <div class="label">진동 증폭 위험도 (실측)</div>
           <div class="val" id="riskLabel">—</div>
           <div class="risk-bar"><div class="risk-fill" id="riskFill"></div></div>
         </div>
@@ -222,6 +222,7 @@
   const maxPoints = HISTORY_SECONDS / dt;
   const buildingHist = [];
   const tmdHist = [];
+  const groundHist = [];
 
   // ---- DOM ----
   const freqSlider = document.getElementById('freqSlider');
@@ -260,7 +261,7 @@
 
   resetBtn.addEventListener('click', ()=>{
     t = 0; groundX = 0; buildingX = 0; buildingV = 0; tmdX = 0; tmdV = 0;
-    buildingHist.length = 0; tmdHist.length = 0;
+    buildingHist.length = 0; tmdHist.length = 0; groundHist.length = 0;
   });
 
   // ---- Physics step (mirrors the VPython while-loop body) ----
@@ -287,7 +288,8 @@
 
     buildingHist.push(buildingX - groundX);
     tmdHist.push(tmdX - buildingX);
-    if (buildingHist.length > maxPoints){ buildingHist.shift(); tmdHist.shift(); }
+    groundHist.push(groundX);
+    if (buildingHist.length > maxPoints){ buildingHist.shift(); tmdHist.shift(); groundHist.shift(); }
 
     t += dt;
   }
@@ -422,6 +424,7 @@
       }
       gctx.stroke();
     }
+    plot(groundHist, '#e8452c');
     plot(buildingHist, '#4fa8e8');
     plot(tmdHist, '#f2c14e');
 
@@ -437,20 +440,35 @@
     const fN = omegaN / (2*Math.PI);
     naturalFreqEl.textContent = fN.toFixed(2) + ' Hz';
 
-    // Dynamic amplification (transmissibility) factor for a damped forced
-    // oscillator: A(r) = 1 / sqrt((1-r^2)^2 + (2*zeta*r)^2), r = f/fn.
-    // This peaks sharply at r=1 (resonance) and falls off on both sides,
-    // which is the physically correct shape - risk is a narrow band around
-    // the natural frequency, not a linear function of how far the slider is.
-    const zeta = 0.05; // assumed structural damping ratio (~5%, typical for buildings)
-    const r = earthquakeFreq / fN;
-    const A = 1 / Math.sqrt(Math.pow(1 - r*r, 2) + Math.pow(2*zeta*r, 2));
-    const pct = Math.round(100 * A / (A + 1)); // smooth 0-100% mapping, no hard clipping
+    // NOTE: fN above is the building's own natural frequency (mass & stiffness
+    // only) - it does NOT include the TMD, so it stays fixed regardless of
+    // TMD mass. That's expected: it's a reference value, not the risk metric.
+    //
+    // The actual risk gauge instead measures the building's REAL, currently
+    // simulated oscillation amplitude (buildingHist, which stores building
+    // displacement relative to the ground) over a recent time window, and
+    // compares it to the fixed 0.5m ground input amplitude. This is a live
+    // dynamic amplification factor (DAF), so it correctly drops when a
+    // heavier TMD mass actually damps the building's motion.
+    const groundAmplitude = 0.5;
+    const windowSize = Math.min(buildingHist.length, 300); // ~3s window
+    let amp = 0;
+    if (windowSize > 5){
+      let maxV = -Infinity, minV = Infinity;
+      for (let i = buildingHist.length - windowSize; i < buildingHist.length; i++){
+        const v = buildingHist[i];
+        if (v > maxV) maxV = v;
+        if (v < minV) minV = v;
+      }
+      amp = (maxV - minV) / 2;
+    }
+    const daf = amp / groundAmplitude; // dynamic amplification factor
+    const pct = Math.round(100 * daf / (daf + 1));
 
     riskFill.style.width = pct + '%';
-    if(pct > 60){ riskLabel.textContent = '위험 (공진 근접) r=' + r.toFixed(2); riskFill.style.background = 'var(--quake)'; }
-    else if(pct > 25){ riskLabel.textContent = '주의  r=' + r.toFixed(2); riskFill.style.background = 'var(--tmd)'; }
-    else { riskLabel.textContent = '안전  r=' + r.toFixed(2); riskFill.style.background = 'var(--safe)'; }
+    if(pct > 60){ riskLabel.textContent = '위험 (증폭 ' + daf.toFixed(2) + '배)'; riskFill.style.background = 'var(--quake)'; }
+    else if(pct > 25){ riskLabel.textContent = '주의  (증폭 ' + daf.toFixed(2) + '배)'; riskFill.style.background = 'var(--tmd)'; }
+    else { riskLabel.textContent = '안전  (증폭 ' + daf.toFixed(2) + '배)'; riskFill.style.background = 'var(--safe)'; }
 
     timeReadout.innerHTML = t.toFixed(1) + '<span> s</span>';
   }
